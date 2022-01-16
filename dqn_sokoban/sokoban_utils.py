@@ -15,3 +15,12 @@ def show_state(state):
     plt.clf()
     plt.imshow(pic)
     plt.show()
+
+
+def save_state(state, file_name, title=None):
+    pic = state_to_pic(state)
+    plt.clf()
+    if title is not None:
+        plt.title(title)
+    plt.imshow(pic)
+    plt.savefig(file_name)
