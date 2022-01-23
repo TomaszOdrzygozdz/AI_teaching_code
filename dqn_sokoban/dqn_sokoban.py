@@ -56,7 +56,7 @@ def make_q_network_sokoban(num_action=4, num_layers=3, kernel_size=(3,3), batch_
 
 
 class DQN_Sokoban:
-    def __init__(self, dim_room, num_boxes, n_envs, epsilon=0.6, min_epsilon=0.1, epsilon_decay=0.999, steps_limit=30, gamma=0.99, q_learning_rate=0.5, replay_buffer_size=5000):
+    def __init__(self, dim_room, num_boxes, n_envs, epsilon=0.6, min_epsilon=0.1, epsilon_decay=0.999, steps_limit=30, gamma=0.99, q_learning_rate=0.5, replay_buffer_size=10000):
         self.dim_room = dim_room
         self.num_boxes = num_boxes
         self.epsilon = epsilon
@@ -232,7 +232,7 @@ class DQN_Sokoban:
         self.q_network.save('model_saved')
 
 
-dupa = DQN_Sokoban((5,5), 1, 25)
+dupa = DQN_Sokoban((6,6), 1, 100)
 env = SokobanEnvFast()
 
 progress = dupa.full_training(100, 2)
