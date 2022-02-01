@@ -9,7 +9,6 @@ def state_to_pic(state):
     env.restore_full_state_from_np_array_version(state)
     return env.render(mode='rgb_array').astype(int)
 
-
 def show_state(state):
     pic = state_to_pic(state)
     plt.clf()

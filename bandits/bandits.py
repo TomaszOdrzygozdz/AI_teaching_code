@@ -46,13 +46,10 @@ class MultiArmBandit():
         self.t = 0
         self.rewards_sum = 0
 
-
-
-
 def test_bandit_alg(multi_armed_bandit, algorithm, T):
     multi_armed_bandit.reset()
+    algorithm.reset()
     regret_history = []
-    action_history = []
     last_reward = None
     last_action = None
 
@@ -60,32 +57,30 @@ def test_bandit_alg(multi_armed_bandit, algorithm, T):
         action = algorithm.act(last_reward, last_action)
         last_action = action
         last_reward = multi_armed_bandit.act(action)
-        action_history.append(action)
         regret_history.append(multi_armed_bandit.regret())
     return regret_history
 
 def test_bandit_n_times(multi_armed_bandit, algorithm, T, n_trials):
     regrets = []
-    n_bandits = len(multi_armed_bandit.list_of_bandits)
     for t in range(n_trials):
         regrets.append(test_bandit_alg(multi_armed_bandit, algorithm, T))
-    min_regret, max_regret, avg_regret = [], [], []
-    for t in range(T):
-        regrets_at_time_t = [regrets[i][t] for i in range(n_trials)]
-        min_regret.append(min(regrets_at_time_t))
-        max_regret.append(max(regrets_at_time_t))
-        avg_regret.append(sum(regrets_at_time_t)/n_bandits)
-    # avg_regret= np.mean(regrets, axis=0)
-
+    avg_regret= np.mean(regrets, axis=0)
     final_regrets = [regrets[i][-1] for i in range(n_trials)]
-    return min_regret, max_regret, avg_regret, final_regrets
+    return avg_regret, final_regrets
+
+def test_many_algs_plot(multi_armed_bandit, algs_list, T, n_trials):
+    plt.clf()
+    for alg in algs_list:
+        avg_regret, _ = test_bandit_n_times(multi_armed_bandit, alg, T, n_trials)
+        plt.plot(avg_regret, label=alg.name)
+    plt.legend(loc="upper left")
+    plt.show()
+
 
 class BanditAlgorithm:
-    def __init__(self, n_bandits):
+    def __init__(self, n_bandits, name):
         self.n_bandits = n_bandits
-        self.empirical_rewards = {a : 0 for a in range(n_bandits)}
-        self.action_stats = {a: 0 for a in range(n_bandits)}
-        self.t = 0
+        self.name = name
 
     def update_history(self, last_reward, last_action):
         if last_reward is not None:
@@ -101,63 +96,119 @@ class BanditAlgorithm:
                 return float('inf')
         return [evaluate_bandit(a) for a in range(self.n_bandits)]
 
+    def reset(self):
+        self.empirical_rewards = {a: 0 for a in range(self.n_bandits)}
+        self.action_stats = {a: 0 for a in range(self.n_bandits)}
+        self.t = 0
+
 
 class Oracle:
-    def act(self):
-        return 2
+    def __init__(self, k):
+        self.name = f'Oracle {k}'
+        self.k = k
+
+    def act(self, last_reward, last_action):
+        return self.k
 
 class FollowTheLeader(BanditAlgorithm):
+    def __init__(self, n_bandits):
+        super().__init__(n_bandits, 'FTL')
 
     def act(self, last_reward, last_action):
         self.update_history(last_reward, last_action)
         return np.argmax(self.empirical_expected_returns())
 
+class EpsilonGreedy(BanditAlgorithm):
+    def __init__(self, n_bandits, epsilon):
+        super().__init__(n_bandits, f'epsilon {epsilon}')
+        self.epsilon = epsilon
+
+    def act(self, last_reward, last_action):
+        self.update_history(last_reward, last_action)
+        if random.random() < self.epsilon:
+            return random.randint(0, self.n_bandits-1)
+        else:
+            return np.argmax(self.empirical_expected_returns())
+
 class UCB1(BanditAlgorithm):
+    def __init__(self, n_bandits, alpha):
+        super().__init__(n_bandits, f'UCB alpha = {alpha}')
+        self.alpha = alpha
+
     def scores(self):
         exploitation_terms = self.empirical_expected_returns()
-
         t = sum([self.action_stats[x] for x in range(self.n_bandits)])
 
         def exploration_score(action):
             if self.action_stats[action] > 0:
-                return np.sqrt(0.6*np.log(t)/self.action_stats[action])
+                return np.sqrt(self.alpha*np.log(t)/self.action_stats[action])
             else:
                 return float('inf')
 
         exploration_terms = [exploration_score(action) for action in range(self.n_bandits)]
-        # print(f'exploit = {exploitation_terms} | explore = {exploration_terms}')
         return np.array(exploitation_terms) + np.array(exploration_terms)
 
     def act(self, last_reward, last_action):
         self.update_history(last_reward, last_action)
-        # print(f'action = {np.argmax(self.scores())}')
         return np.argmax(self.scores())
+
+class ThompsonSampling():
+    name = 'Thompson'
+    def __init__(self, n_bandits):
+        self.n_bandits = n_bandits
+        self.reset()
+
+    def act(self, last_reward, last_action):
+        if last_reward is not None:
+            self.alpha_beta_list[last_action][0] += last_reward
+            self.alpha_beta_list[last_action][1] += 1 - last_reward
+
+        thetas = []
+        for action in range(self.n_bandits):
+            thetas.append(np.random.beta(*self.alpha_beta_list[action]))
+
+        return np.argmax(thetas)
+
+    def reset(self):
+        self.alpha_beta_list = [[1, 1] for _ in range(self.n_bandits)]
 
 
 dupa = MultiArmBandit([
     BernoulliBandit(0.3),
+    BernoulliBandit(0.35),
     BernoulliBandit(0.4),
+    BernoulliBandit(0.45),
     BernoulliBandit(0.5)])
 
-min_regret, max_regret, avg_regret, final_regrets = test_bandit_n_times(dupa, UCB1(3), 500, 500)
+test_many_algs_plot(dupa, [
+    EpsilonGreedy(5, 0.05), UCB1(5, 0.5),FollowTheLeader(5), ThompsonSampling(5)], 10000, 50)
 
-# min_regret, max_regret, avg_regret, final_regrets = test_bandit_n_times(dupa, FollowTheLeader(3), 500, 100)
+# ttt = test_bandit_alg(dupa, UCB1(3), 500)
+# avg_regret_oracle1, final_regrets_oracle1 = test_bandit_n_times(dupa, Oracle(), 100, 1)
+# avg_regret_oracle, final_regrets_oracle = test_bandit_n_times(dupa, Oracle(), 100, 10)
+# avg_regret_epsilon, final_regrets_epsilon = test_bandit_n_times(dupa, EpsilonGreedy(5, 0.1), 500, 200)
+# avg_regret_ucb, final_regrets_ucb = test_bandit_n_times(dupa, UCB1(5, 0.5), 500, 200)
+# avg_regret_ftl, final_regrets_ftl = test_bandit_n_times(dupa, FollowTheLeader(5), 500, 200)
 # regret_history, action_history = test_bandit_alg(dupa, Oracle(), 10000)
 
 
-plt.clf()
-# plt.plot(min_regret, label="Min regret")
-# plt.plot(max_regret, label="Max regret")
-plt.plot(avg_regret, label="Avg regret")
-
-# plt.hist(final_regrets)
-# plt.plot(action_history, label="Regret")
-
-# plt.plot(sarsa_running_avg, label="SARSA")
-plt.legend(loc="upper left")
-plt.show()
-
-# dupa = MultiArmBandit([
+# plt.clf()
+# # plt.plot(min_regret, label="Min regret")
+# # plt.plot(max_regret, label="Max regret")
+# # plt.plot(avg_regret_oracle1, label="Oracle1")
+# # plt.plot(avg_regret_oracle, label="Oracle")
+# plt.plot(avg_regret_epsilon, label="e-greedy")
+# plt.plot(avg_regret_ucb, label="UCB1")
+# plt.plot(avg_regret_ftl, label="FTL")
+#
+# # plt.hist(final_regrets)
+# # plt.plot(action_history, label="Regret")
+#
+# # plt.plot(sarsa_running_avg, label="SARSA")
+# plt.legend(loc="upper left")
+# plt.show()
+#
+# # dupa = MultiArmBandit([
 #     OneArmBandit([0.5, 0.5], [0,1]),
 #     OneArmBandit([0.2, 0.8], [-1, 1])
 # ])
