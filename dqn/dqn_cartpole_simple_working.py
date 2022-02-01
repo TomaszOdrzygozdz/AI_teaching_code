@@ -64,7 +64,7 @@ class DQN_Cartpole:
                  learning_rate = 0.5,
                  replay_buffer_size=2000,
                  train_every_n_steps=32,
-                 train_mini_batch_size=64,
+                 train_mini_batch_size=128,
                  update_target_network_every_n_steps=128,
                  train_epochs=2):
 
@@ -89,28 +89,6 @@ class DQN_Cartpole:
         self.do_decay = True
 
         self.global_stats = [1,1]
-
-    # def precollect_episodes(self, n_episodes):
-    #     self.do_decay = False
-    #     original_epsilon = self.epsilon
-    #     self.epsilon = 1.
-    #     for _ in range(n_episodes):
-    #         self.run_one_episode()
-    #     self.epsilon = original_epsilon
-    #     self.do_decay = True
-
-    # def precollect_episodes(self, n_episodes):
-    #     for _ in range(n_episodes):
-    #         done = False
-    #         state = self.env.reset()
-    #         while not done:
-    #             action, action_values = self.choose_action(state)
-    #             next_state, reward, done, _ = self.env.step(action)
-    #             new_transition = Transition(state, action_values, action, reward, done, next_state)
-    #             state = next_state
-    #             self.replay_buffer.append(new_transition)
-    #
-
 
     def predict_q_values(self, state):
         predi = self.q_network.predict(np.array([state]))[0]
@@ -217,14 +195,16 @@ class DQN_Cartpole:
 
     def full_training(self, n_epochs):
         progress = []
+        progress_moving_avg = [0]
         for epoch in range(n_epochs):
             reward= self.run_one_episode()
+            progress_moving_avg.append(progress_moving_avg[-1]*0.75 + 0.25*reward)
             stats = [self.global_stats[0]/sum(self.global_stats), self.global_stats[1]/sum(self.global_stats)]
             print(f'Episode = {epoch} | reward = {reward} | epsilon = {self.epsilon} | buffer = {len(self.replay_buffer)} | global_stats = {stats}')
             progress.append(reward)
 
         # self.save_network()
-        return progress
+        return progress, progress_moving_avg
 
     def save_network(self):
         self.q_network.save('model_saved')
@@ -232,13 +212,14 @@ class DQN_Cartpole:
 
 dupa = DQN_Cartpole()
 
-progress = dupa.full_training(200)
+progress, smooth_progress = dupa.full_training(300)
 # rew, sol = dupa.run_parallel_episodes()
 
 # print(f'rew = {rew} sol = {sol}')
 
 plt.clf()
 plt.plot(progress, label="DQN learning")
+plt.plot(smooth_progress, label="DQN learning (smooth)")
 plt.legend(loc="upper left")
 plt.show()
 
